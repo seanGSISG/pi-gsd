@@ -138,7 +138,7 @@ Build a SendGrid wrapper module.
 
 ## Tasks
 
-```task
+```
 {
   "id": "t1",
   "name": "Create email client",
