@@ -9,9 +9,15 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 import { registerHelloCommand } from "./commands/hello.js";
+import { registerInitCommand } from "./commands/init.js";
+import { registerDiscussCommand } from "./commands/discuss.js";
+import { registerPlanCommand } from "./commands/plan.js";
 import { registerHooks } from "./hooks/index.js";
 
 export default function piGsd(pi: ExtensionAPI): void {
 	registerHelloCommand(pi);
+	registerInitCommand(pi);
+	registerDiscussCommand(pi);
+	registerPlanCommand(pi);
 	registerHooks(pi, process.cwd());
 }
