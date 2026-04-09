@@ -12,6 +12,7 @@ import { registerHelloCommand } from "./commands/hello.js";
 import { registerInitCommand } from "./commands/init.js";
 import { registerDiscussCommand } from "./commands/discuss.js";
 import { registerPlanCommand } from "./commands/plan.js";
+import { registerExecuteCommand } from "./commands/execute.js";
 import { registerHooks } from "./hooks/index.js";
 
 export default function piGsd(pi: ExtensionAPI): void {
@@ -19,5 +20,6 @@ export default function piGsd(pi: ExtensionAPI): void {
 	registerInitCommand(pi);
 	registerDiscussCommand(pi);
 	registerPlanCommand(pi);
+	registerExecuteCommand(pi);
 	registerHooks(pi, process.cwd());
 }
