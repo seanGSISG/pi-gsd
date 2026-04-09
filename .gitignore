@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# project-level workspace state used when dogfooding pi-gsd on itself
+.pi-gsd/worktrees/
+.pi-gsd/memory/.dream-lock
+.pi-gsd/memory/.dream.log
+.pi-gsd/phases/*/.resume.json

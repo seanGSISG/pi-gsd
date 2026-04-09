@@ -1,0 +1,64 @@
+{
+	"name": "@seangsisg/pi-gsd",
+	"version": "0.1.0",
+	"description": "Modern agentic workflow engine for the pi coding CLI — phases, wave-parallel executors, 3-layer verification, dream-loop memory. Inspired by GSD (get-shit-done).",
+	"type": "module",
+	"main": "./dist/extension.js",
+	"exports": {
+		".": {
+			"types": "./dist/extension.d.ts",
+			"import": "./dist/extension.js"
+		}
+	},
+	"files": [
+		"dist",
+		"agents",
+		"skills",
+		"prompts",
+		"README.md"
+	],
+	"pi": {
+		"extensions": [
+			"./dist/extension.js"
+		],
+		"skills": [
+			"./skills"
+		],
+		"prompts": [
+			"./prompts"
+		]
+	},
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"dev": "tsc -p tsconfig.json --watch",
+		"test": "vitest --run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"clean": "rm -rf dist"
+	},
+	"peerDependencies": {
+		"@mariozechner/pi-coding-agent": ">=0.66.0"
+	},
+	"dependencies": {
+		"@mariozechner/pi-agent-core": "^0.66.1",
+		"@sinclair/typebox": "^0.33.0",
+		"yaml": "^2.5.0"
+	},
+	"devDependencies": {
+		"@mariozechner/pi-coding-agent": "^0.66.1",
+		"@types/node": "^22.0.0",
+		"typescript": "^5.6.0",
+		"vitest": "^2.1.0"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"keywords": [
+		"pi",
+		"pi-extension",
+		"agentic-workflow",
+		"coding-agent",
+		"gsd"
+	],
+	"license": "MIT"
+}
