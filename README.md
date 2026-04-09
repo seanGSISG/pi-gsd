@@ -138,7 +138,7 @@ Build a SendGrid wrapper module.
 
 ## Tasks
 
-```
+
 {
   "id": "t1",
   "name": "Create email client",
@@ -147,7 +147,7 @@ Build a SendGrid wrapper module.
   "verify": "grep -q 'export function sendEmail' src/email/client.ts",
   "done": "client.ts exists and exports sendEmail"
 }
-```
+
 ```
 
 ### Waves: parallelism without mayhem
