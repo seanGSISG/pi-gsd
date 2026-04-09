@@ -1,166 +1,291 @@
 # pi-gsd
 
-A modern agentic workflow engine for the [pi coding CLI](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), inspired by [get-shit-done](https://github.com/gsd-build/get-shit-done) but redesigned for 2025-era agent tooling.
+**An opinionated, phase-based workflow for the [pi coding CLI](https://github.com/badlogic/pi-mono).**
 
-Ships as a pi extension — `pi install git:github.com/seanGSISG/pi-gsd` and you get a full phase-based workflow (`/gsd-plan`, `/gsd-execute`, `/gsd-verify`, `/gsd-ship`) with parallel git-worktree executors, deterministic hook-enforced guardrails, and a background memory-consolidation dream loop.
+Break big work into small phases. Plan each phase with a sub-agent. Execute plans in parallel inside isolated git worktrees. Verify against concrete must-haves. Remember what you learned between sessions.
 
-> **Status**: v0.1 — the entire deterministic pipeline (plan parsing, wave scheduling, worktrees, deterministic verification, session memory, dream gates) is complete and exercised by an E2E smoke test. LLM-driven steps (planner, executor, verifier) currently render prompt artefacts that you feed to the main pi session; direct in-process sub-agent transport is the v1.1 upgrade.
+pi is deliberately minimal — four tools (read, write, edit, bash) and an extension API. pi-gsd adds the layer above: **discuss → plan → execute → verify → ship**, with deterministic safety rails and a background memory-consolidation "dream" loop.
+
+Inspired by [get-shit-done](https://github.com/gsd-build/get-shit-done), redesigned from scratch with ideas from Anthropic's multi-agent research system, Cognition's "don't build multi-agents" principle, CodeAct, and the leaked Claude Code autoDream service.
+
+---
+
+## Why use it
+
+Coding agents are great at small tasks and fall over on big ones. The usual failure modes:
+
+- **Context rot.** The conversation fills up with stale reasoning and the model starts contradicting itself.
+- **Silent scope reduction.** You ask for X, Y, Z and get X and a half.
+- **No memory across sessions.** Every new chat starts cold.
+- **One slow thread.** Even when tasks are independent, the agent does them serially.
+- **"Trust me, it works."** No real verification; bugs slip in because nobody checked.
+
+pi-gsd tries to fix each one:
+
+| Problem | pi-gsd answer |
+|---|---|
+| Context rot | Every sub-agent gets a fresh 200k context and only the files it needs |
+| Scope reduction | Every requirement becomes a `must_have` the verifier checks against reality |
+| Cold starts | A two-tier memory system (daily logs + reflective "dream" consolidation) that auto-loads into every sub-agent |
+| Serial work | Wave-based parallel executors in isolated git worktrees |
+| Unverified work | Three verification layers: deterministic (tests/lint/types) → LLM self-check → ensemble judges |
+
+---
 
 ## Install
 
 ```bash
-# From a clone (development):
+# One-liner (when the repo is public):
+pi install git:github.com/seanGSISG/pi-gsd
+
+# Or from a local clone:
+git clone https://github.com/seanGSISG/pi-gsd
+cd pi-gsd
 npm install
 npm run build
-pi install /path/to/pi-gsd -l   # -l = install into the current project only
-
-# From a GitHub remote:
-pi install git:github.com/seanGSISG/pi-gsd
+pi install . -l            # -l = install into this project only
 ```
 
-After install, `pi` will pick up 11 `/gsd-*` commands on next launch.
+Then launch pi in any git repo and type `/gsd-hello`. If you see `pi-gsd v0.1.0 loaded`, you're good.
 
-## Commands
+> **Requirements:** Node.js 20+, git, and [pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) 0.66+.
 
-| Command | Purpose |
+---
+
+## Quick start — your first phase
+
+Inside any git repo:
+
+```bash
+pi                                    # launch pi
+/gsd-init                             # answer 3 questions, scaffolds .pi-gsd/
+```
+
+Edit `.pi-gsd/ROADMAP.md` and list the phases you want, one per line. Then:
+
+```bash
+/gsd-discuss 01                       # capture goal + constraints for phase 01
+/gsd-plan 01                          # render a planner prompt
+```
+
+pi-gsd writes a `planner.prompt.md` file. Paste it to pi, save pi's reply as `PLAN.md`, then:
+
+```bash
+/gsd-plan 01                          # now validates the saved PLAN.md
+/gsd-execute 01                       # schedules plans into waves, makes git worktrees, writes executor prompts
+```
+
+Feed each executor prompt to pi (one per plan). When they're all done:
+
+```bash
+/gsd-verify 01                        # runs your tests, lint, typecheck; writes VERIFICATION.md
+/gsd-ship                             # assembles a PR body and optionally runs `gh pr create`
+```
+
+And between sessions, the dream loop quietly consolidates what you learned:
+
+```bash
+/gsd-dream                            # runs only if enough time + session activity has accumulated
+/gsd-dream --force                    # run now regardless
+/gsd-memory                           # peek at what's been consolidated
+```
+
+---
+
+## All commands
+
+| Command | What it does |
 |---|---|
-| `/gsd-hello` | Smoke test — confirms the extension loads |
+| `/gsd-hello` | Smoke test — confirms pi-gsd is loaded |
 | `/gsd-init` | Scaffold `.pi-gsd/` with PROJECT.md, AGENTS.md, ROADMAP.md, STATE.md |
-| `/gsd-discuss <phase>` | Capture goal + constraints + open questions → `phases/<phase>/CONTEXT.md` |
-| `/gsd-plan <phase>` | Render the planner prompt or validate an existing PLAN.md |
-| `/gsd-execute <phase>` | Schedule plans into dependency waves, create one git worktree per plan, render executor prompts |
-| `/gsd-verify <phase>` | Run deterministic checks (test/lint/typecheck) + render verifier prompt → VERIFICATION.md |
-| `/gsd-ship` | Assemble PR body from latest SUMMARY/VERIFICATION, optionally `gh pr create` |
-| `/gsd-status` | Dashboard of STATE.md, discovered phases, active pi-gsd worktrees |
-| `/gsd-resume` | Read the newest `.resume.json` and cross-check its worktrees |
-| `/gsd-dream [--force]` | Run the memory-consolidation dream (bypasses time+session gates with `--force`) |
-| `/gsd-memory` | View `memory/MEMORY.md`, list topic files, show last-dream timestamp |
+| `/gsd-discuss <phase>` | Capture goal, constraints, and open questions for a phase |
+| `/gsd-plan <phase>` | Render the planner prompt, or validate an existing PLAN.md |
+| `/gsd-execute <phase>` | Schedule plans into dependency waves, create worktrees, render executor prompts |
+| `/gsd-verify <phase>` | Run tests/lint/typecheck, write VERIFICATION.md, render verifier prompt |
+| `/gsd-ship` | Build a PR body from latest SUMMARY/VERIFICATION and (optionally) `gh pr create` |
+| `/gsd-status` | Dashboard: current phase, plans done, active worktrees |
+| `/gsd-resume` | Resume a paused execution from `.resume.json` |
+| `/gsd-dream [--force]` | Background memory consolidation pass |
+| `/gsd-memory` | View the consolidated memory index and topic files |
 
-## Workflow
+---
 
+## How it thinks
+
+### Phases → plans → atomic tasks
+
+A **phase** is a chunk of work big enough to matter, small enough to finish (e.g. "add email notifications"). Phases are composed of one or more **plans**, each of which is a set of **atomic tasks**. Every task is one commit.
+
+A `PLAN.md` looks like:
+
+```yaml
+---
+phase: "03"
+plan: "03-01"
+depends_on: []
+files_modified:
+  - src/email/client.ts
+must_haves:
+  - id: mh-1
+    kind: artifact
+    statement: "src/email/client.ts exports sendEmail"
+    risk: normal
+---
+
+# Objective
+
+Build a SendGrid wrapper module.
+
+## Tasks
+
+```task
+{
+  "id": "t1",
+  "name": "Create email client",
+  "files": ["src/email/client.ts"],
+  "action": "Write a module exporting sendEmail(to, template, data) that wraps the SendGrid SDK with retry + logging.",
+  "verify": "grep -q 'export function sendEmail' src/email/client.ts",
+  "done": "client.ts exists and exports sendEmail"
+}
 ```
-/gsd-init
-  ↓ edit .pi-gsd/ROADMAP.md with phase names
-/gsd-discuss 01       → phases/01/CONTEXT.md
-  ↓
-/gsd-plan 01          → phases/01/planner.prompt.md
-  ↓ paste into pi main session, save reply as PLAN.md
-/gsd-plan 01          → validates PLAN.md
-  ↓
-/gsd-execute 01       → schedules into waves, creates worktrees, writes executor.prompt.md per plan
-  ↓ feed each executor prompt to pi, let it commit atomically inside its worktree
-/gsd-verify 01        → deterministic layer runs; verifier.prompt.md is written
-  ↓
-/gsd-ship             → last-pr.md + gh pr create
-```
-
-## Architecture
-
-```
-src/
-├── extension.ts           Registers commands + tool_call safety hook + session_shutdown memory hook
-├── commands/              Slash-command entry points (one file each)
-├── orchestrator/
-│   ├── subagent.ts        Prompt-rendering helper (loadRolePrompt + renderSubagentPrompt)
-│   ├── wave-scheduler.ts  Kahn topological sort + wave grouping + intra-wave file-conflict detection
-│   └── worktree.ts        git worktree add/remove/merge/list helpers
-├── plan/
-│   ├── schema.ts          TypeBox Plan / Task / MustHave / Frontmatter
-│   ├── parser.ts          YAML frontmatter + ```task fenced JSON blocks
-│   └── emitter.ts         Round-trip-stable Markdown serializer
-├── verification/
-│   └── deterministic.ts   runDeterministicChecks (auto-detects npm test/lint/typecheck)
-├── hooks/
-│   ├── pre-tool-guard.ts  inspectBashCommand (rm -rf/-fr, mkfs, fork bomb, etc) + inspectWritePath
-│   ├── injection-scan.ts  Only scans writes into .pi-gsd/; catches jailbreak phrases, hidden tags, invisible unicode
-│   └── index.ts           Wires the above into pi.on("tool_call") with ToolCallEventResult.block semantics
-└── memory/
-    ├── state.ts           .pi-gsd/STATE.md atomic writer with .backup sibling
-    ├── agents-md.ts       .pi-gsd/AGENTS.md seeder + append helpers
-    ├── session-memory.ts  Tier 1: append-only logs/YYYY/MM/YYYY-MM-DD.md
-    ├── dream-lock.ts      PID + mtime file lock with 60-min stale guard (ported from claude-code)
-    ├── dream-prompt.ts    4-phase reflective-pass prompt (Orient → Gather → Consolidate → Prune/Index)
-    └── dream.ts           Tier 2: gate sequence (time → scan throttle → session → lock), fires the prompt
-
-agents/                    Role prompts loaded by renderSubagentPrompt
-├── planner.md
-├── plan-checker.md
-├── executor.md
-└── verifier.md
 ```
 
-### Data layout (`.pi-gsd/`)
+### Waves: parallelism without mayhem
+
+When you `/gsd-execute` a phase, pi-gsd reads every PLAN.md and builds a dependency graph:
+
+```
+wave 1:  01-01 (schema)     01-02 (logger)
+              ↓                     ↓
+wave 2:  01-03 (api)   ← both depend on schema+logger
+              ↓
+wave 3:  01-04 (ui)   ← depends on api
+```
+
+Plans inside the same wave run **in parallel**, each in its own `git worktree` so file writes can't collide. If two plans in the same wave touch the same file, pi-gsd catches it before execution and makes you split or sequence them.
+
+### Three-layer verification
+
+After execution, `/gsd-verify` runs these in order:
+
+1. **Deterministic layer** — your real tests, lint, typecheck. Fast and cheap. Runs every time.
+2. **LLM self-check** — an agent reads your PLAN.md must-haves and the actual code, and marks each one pass/fail against reality, not against what the executor claimed.
+3. **Ensemble judges** (only for must-haves tagged `risk: high`) — three lightweight judges with different rubrics (correctness / security / style) vote.
+
+Fails flow back into a revision loop. There's no "trust me."
+
+### Deterministic safety hooks
+
+pi-gsd registers a blocking `tool_call` hook that catches, before any destructive action reaches pi:
+
+- `rm -rf`, `rm -fr`, `mkfs`, fork bombs, `shutdown`, `dd if=/dev/zero of=/dev/sda`…
+- Writes outside the project root
+- Writes to `.env*`, `.ssh/`, `.aws/`, SSH private keys
+- Prompt-injection patterns in writes to `.pi-gsd/` (hidden `<system>` tags, jailbreak phrases, zero-width unicode)
+
+These are **deterministic**, not prompt-based, so they hold even if a planner or executor is prompt-injected.
+
+### Memory that survives sessions
+
+Two tiers, both stored under `.pi-gsd/memory/`:
+
+- **Tier 1 — SessionMemory.** An append-only daily log at `memory/logs/YYYY/MM/YYYY-MM-DD.md`. Phase completions and session shutdowns drip state snapshots here. Cheap, no LLM involved.
+- **Tier 2 — Dream.** A reflective consolidation pass that reads the daily logs and the phase summaries, then updates `memory/MEMORY.md` (an index) and topic files (`design-patterns.md`, `build-system.md`, etc). Gated by three things: ≥8 hours since last dream, ≥3 log files touched since, and a PID+mtime file lock so two pi sessions can't dream at once.
+
+Directly ported from the [Claude Code autoDream service](https://github.com/yasasbanukaofficial/claude-code/tree/main/src/services/autoDream), adapted for pi-gsd's phase vocabulary.
+
+---
+
+## What gets written to your project
 
 ```
 .pi-gsd/
-├── PROJECT.md                 Vision + constraints
-├── AGENTS.md                  Living human-editable project memory
-├── ROADMAP.md                 Phase list with success criteria
-├── STATE.md                   Current position (short, ephemeral)
-├── config.json                Workflow toggles (dream thresholds etc)
+├── PROJECT.md            # Vision + constraints
+├── AGENTS.md             # Living project memory (edit by hand)
+├── ROADMAP.md            # Phase list with success criteria
+├── STATE.md              # Current position (where am I in the flow)
 ├── memory/
-│   ├── MEMORY.md              Index, <200 lines, <25KB — auto-loaded context
-│   ├── <topic>.md             Consolidated memories (4 frontmatter types)
-│   ├── logs/YYYY/MM/YYYY-MM-DD.md   SessionMemory daily stream
-│   ├── .dream-lock            PID + mtime — Tier 2 cooldown and mutex
-│   └── .dream.log             JSONL observability line per dream fire
-└── phases/NN-name/
-    ├── CONTEXT.md             From /gsd-discuss
-    ├── RESEARCH.md            Optional
-    ├── planner.prompt.md      From /gsd-plan
-    ├── PLAN.md                The plan body — YAML frontmatter + fenced task JSON
-    ├── <plan>.executor.prompt.md  One per plan, from /gsd-execute
-    ├── <plan>-SUMMARY.md      Executor output
-    ├── verifier.prompt.md     From /gsd-verify
-    ├── VERIFICATION.md        Must-have verdicts + deterministic report
-    └── .resume.json           Restart state for /gsd-resume
+│   ├── MEMORY.md         # Auto-maintained index of long-term memories
+│   ├── *.md              # Topic files consolidated by the dream loop
+│   ├── logs/             # Append-only daily session logs
+│   └── .dream-lock       # PID + mtime — cooldown and mutex
+└── phases/
+    └── 01-email/
+        ├── CONTEXT.md    # From /gsd-discuss
+        ├── PLAN.md       # Generated, validated by /gsd-plan
+        ├── 01-01-SUMMARY.md   # After /gsd-execute
+        ├── VERIFICATION.md    # After /gsd-verify
+        └── .resume.json  # For /gsd-resume if interrupted
 ```
 
-## Key design departures from GSD
+Nothing pi-gsd touches lives outside `.pi-gsd/` except the actual code you asked the executor to write.
 
-1. **Hybrid plan format** — Markdown + YAML frontmatter + `'''task` fenced JSON, not XML. Smaller context footprint, better for future [CodeAct](https://arxiv.org/abs/2402.01030)-style upgrades.
-2. **Hooks do the safety work, not prompts** — `tool_call` event blocking via pi's extension API, so guardrails hold even if a planner or executor is prompt-injected.
-3. **DAG + dynamic waves** — `depends_on` is per-plan, `wave` is computed, not hand-assigned. Re-planning is cheap.
-4. **Devin's "don't build multi-agents" principle** — we only spawn sub-agents for parallel-safe work (disjoint `files_modified`). Overlap is detected pre-flight and forces sequential execution.
-5. **Two-tier memory with a dream loop** — SessionMemory (hot, cheap, append-only daily logs) + Dream (cold, reflective, gated consolidation pass) directly ported from the leaked [claude-code autoDream service](https://github.com/yasasbanukaofficial/claude-code/tree/main/src/services/autoDream). GSD has zero cross-session semantic memory; pi-gsd has an auto-maintained `MEMORY.md` playbook.
-6. **3-layer verification** — deterministic checks first (free), LLM self-check second, ensemble judges only for high-risk must-haves. Scaffolded; v1 implements layer 1 end-to-end and renders prompts for 2+3.
+---
 
-## Tests
+## Current status (v0.1)
+
+The entire **deterministic pipeline** — plan parsing, wave scheduling, git worktrees, deterministic verification, session memory, dream gates — is done and exercised by an E2E smoke test.
+
+The **LLM-driven steps** — planner, executor, verifier — currently render prompt artefacts you paste into the main pi session. Upgrading them to in-process sub-agents (using `@mariozechner/pi-agent-core`'s `Agent` class) is the v1.1 change. The interfaces are already shaped for it — `src/orchestrator/subagent.ts`.
+
+### What works today
+
+- ✅ 11 slash commands registered and verified in a real pi resource loader
+- ✅ 44 unit tests (plan parser, wave scheduler, hooks, state, dream lock, dream gates)
+- ✅ End-to-end pipeline on a scratch git repo: scaffold → plan round-trip → wave schedule → worktree create/remove → deterministic checks → SessionMemory → dream fire → observability log
+- ✅ Deterministic safety hooks blocking real destructive patterns
+- ✅ Full two-tier memory system with gated consolidation
+
+### Known v1 limitations
+
+- Planner / executor / verifier are prompt-artefact based (paste-into-pi-session pattern). In-process sub-agents land in v1.1.
+- KAIROS-style always-on background mode is deferred.
+- No MCP integration in v1 — pi's built-in tools cover the workflow.
+- Single model profile — no `/gsd-set-profile` yet.
+
+---
+
+## Development
 
 ```bash
-npm test            # 44 unit tests, ~300ms
-node scripts/smoke.mjs   # runtime check: extension loads in real pi resource loader
-node scripts/e2e.mjs     # full pipeline on a scratch git repo
+git clone https://github.com/seanGSISG/pi-gsd
+cd pi-gsd
+npm install
+npm run build
+npm test                               # 44 unit tests, ~300ms
+node scripts/smoke.mjs                 # runtime extension load check
+node scripts/e2e.mjs                   # full pipeline on a scratch git repo
 ```
 
-The E2E script:
+Project layout:
 
-1. Creates a temp git repo
-2. Scaffolds `.pi-gsd/`
-3. Writes two PLAN.md files with a dependency
-4. Runs the wave scheduler (expects 2 waves, 0 conflicts)
-5. Creates + lists + removes a git worktree
-6. Runs deterministic checks against `npm test`
-7. Appends SessionMemory entries across different days
-8. Forces a dream pass — verifies prompt file, observability log, state persistence
+```
+src/
+├── extension.ts               # pi entry point
+├── commands/                  # one file per slash command
+├── orchestrator/              # subagent, wave-scheduler, worktree
+├── plan/                      # TypeBox schema + parser + emitter
+├── verification/              # deterministic checks
+├── hooks/                     # pre-tool guards + injection scanner
+└── memory/                    # state, agents-md, session-memory, dream*
+agents/                        # role prompts (planner, executor, verifier, checker)
+test/                          # vitest suites
+scripts/                       # smoke.mjs + e2e.mjs
+```
 
-## Known limitations (v1)
+---
 
-- **Planner / executor / verifier run out-of-process** via rendered prompt artefacts. v1.1 will wire `@mariozechner/pi-agent-core`'s `Agent` class for in-process fresh-context sub-agents (blueprint already in `src/orchestrator/subagent.ts`).
-- **KAIROS "always-on" mode is deferred.** v1 implements only the gated forked-agent dream path; KAIROS lives behind a feature flag in v1.1.
-- **No MCP integration in v1.** Pi's built-in tools cover everything; MCP can be added as an extension.
-- **Single-model config.** `/gsd-set-profile` for model switching is out of scope for v1.
+## References
 
-## Reference sources
-
-- [badlogic/pi-mono](https://github.com/badlogic/pi-mono) — the pi coding CLI this extends
-- [gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done) — the workflow engine whose spine we adopted
-- [yasasbanukaofficial/claude-code](https://github.com/yasasbanukaofficial/claude-code/tree/main/src/services/autoDream) — the leaked autoDream implementation we ported directly
-- [ultraworkers/claw-code](https://github.com/ultraworkers/claw-code) — cross-reference for multi-agent orchestration patterns
+- [pi-mono](https://github.com/badlogic/pi-mono) — the coding CLI this extends
+- [get-shit-done](https://github.com/gsd-build/get-shit-done) — the workflow engine whose spine we adopted
+- [Claude Code autoDream](https://github.com/yasasbanukaofficial/claude-code/tree/main/src/services/autoDream) — directly ported for Phase 9
 - [Anthropic: Effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
 - [Anthropic: How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
 - [Cognition: Don't build multi-agents](https://cognition.ai/blog/dont-build-multi-agents)
 - [CodeAct (ICML 2024)](https://arxiv.org/abs/2402.01030)
+
+---
 
 ## License
 
